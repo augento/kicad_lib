@@ -19,6 +19,10 @@ pub struct SymbolLibraryFile {
     pub version: u32,
     /// The `generator` token attribute defines the program used to write the file.
     pub generator: String,
+    /// Whether the generator was originally a string (newer format) or symbol (legacy format)
+    pub generator_is_string: bool,
+    /// Optional generator version for newer KiCad formats
+    pub generator_version: Option<String>,
     /// The symbol definitions go here. Symbol library files can have zero or more symbols.
     pub symbols: Vec<SymbolDefinition>,
 }
@@ -28,7 +32,34 @@ impl FromSexpr for SymbolLibraryFile {
         parser.expect_symbol_matching("kicad_symbol_lib")?;
 
         let version = parser.expect_number_with_name("version")? as u32;
-        let generator = parser.expect_symbol_with_name("generator")?;
+        // Handle both old format (symbol) and new format (string) for generator
+        let (generator, generator_is_string) = {
+            let mut gen_parser = parser.expect_list_with_name("generator")?;
+            // Peek to see if it's a string or symbol
+            let next = gen_parser.peek_next();
+            if let Some(sexpr) = next {
+                match sexpr {
+                    kicad_sexpr::Sexpr::String(_) => {
+                        let s = gen_parser.expect_string()?;
+                        gen_parser.expect_end()?;
+                        (s, true)
+                    }
+                    kicad_sexpr::Sexpr::Symbol(_) => {
+                        let s = gen_parser.expect_symbol()?;
+                        gen_parser.expect_end()?;
+                        (s, false)
+                    }
+                    _ => {
+                        return Err(KiCadParseError::UnexpectedSexprType {
+                            expected: crate::SexprKind::String,
+                        })
+                    }
+                }
+            } else {
+                return Err(KiCadParseError::UnexpectedEndOfList);
+            }
+        };
+        let generator_version = parser.maybe_string_with_name("generator_version")?;
         let symbols = parser.expect_many::<SymbolDefinition>()?;
 
         parser.expect_end()?;
@@ -36,6 +67,8 @@ impl FromSexpr for SymbolLibraryFile {
         Ok(Self {
             version,
             generator,
+            generator_is_string,
+            generator_version,
             symbols,
         })
     }
@@ -48,7 +81,15 @@ impl ToSexpr for SymbolLibraryFile {
             [
                 &[
                     Some(Sexpr::number_with_name("version", self.version as f32)),
-                    Some(Sexpr::symbol_with_name("generator", &self.generator)),
+                    // Preserve original format: string vs symbol
+                    Some(if self.generator_is_string {
+                        Sexpr::string_with_name("generator", &self.generator)
+                    } else {
+                        Sexpr::symbol_with_name("generator", &self.generator)
+                    }),
+                    self.generator_version
+                        .as_ref()
+                        .map(|v| Sexpr::string_with_name("generator_version", v)),
                 ][..],
                 &self.symbols.into_sexpr_vec(),
             ]

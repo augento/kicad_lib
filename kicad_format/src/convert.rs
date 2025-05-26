@@ -414,6 +414,22 @@ impl Parser {
             .transpose()
     }
 
+    pub fn maybe_bool_with_name(&mut self, name: &str) -> Result<Option<bool>, KiCadParseError> {
+        self.maybe_list_with_name(name)
+            .map(|mut d| {
+                let result = d.expect_symbol()?;
+                match result.as_str() {
+                    "yes" => Ok(true),
+                    "no" => Ok(false),
+                    _ => Err(KiCadParseError::InvalidEnumValue {
+                        value: result,
+                        enum_name: "bool",
+                    }),
+                }
+            })
+            .transpose()
+    }
+
     pub fn maybe_symbol_matching(&mut self, expected: &str) -> bool {
         let Some(symbol) = self.peek_symbol() else {
             return false;

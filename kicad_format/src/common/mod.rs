@@ -355,6 +355,8 @@ pub struct TextEffects {
     pub justify: Option<Justify>,
     /// The optional `hide` token defines if the text is hidden.
     pub hide: bool,
+    /// Whether the hide was in legacy format (just "hide") vs new format ("hide yes/no")
+    pub hide_legacy_format: bool,
     /// UNDOCUMENTED: The `href` token specifies the hyperlink of the text.
     pub href: Option<String>,
 }
@@ -368,11 +370,14 @@ impl TextEffects {
                 line_spacing: None,
                 thickness: None,
                 bold: false,
+                bold_legacy_format: false,
                 italic: false,
+                italic_legacy_format: false,
                 color: None,
             },
             justify: None,
             hide: false,
+            hide_legacy_format: false,
             href: None,
         }
     }
@@ -390,6 +395,14 @@ impl TextEffects {
     pub fn with_hide(self, hide: bool) -> Self {
         Self { hide, ..self }
     }
+
+    pub fn with_hide_legacy(self, hide: bool) -> Self {
+        Self {
+            hide,
+            hide_legacy_format: true,
+            ..self
+        }
+    }
 }
 
 impl FromSexpr for TextEffects {
@@ -398,7 +411,14 @@ impl FromSexpr for TextEffects {
 
         let font = parser.expect::<Font>()?;
         let justify = parser.maybe::<Justify>()?;
-        let hide = parser.maybe_symbol_matching("hide");
+        // Handle both old format (hide) and new format (hide yes/no)
+        let (hide, hide_legacy_format) = if parser.maybe_symbol_matching("hide") {
+            (true, true)
+        } else if let Some(hide_value) = parser.maybe_bool_with_name("hide")? {
+            (hide_value, false)
+        } else {
+            (false, false)
+        };
         let href = parser.maybe_string_with_name("href")?;
 
         parser.expect_end()?;
@@ -407,6 +427,7 @@ impl FromSexpr for TextEffects {
             font,
             justify,
             hide,
+            hide_legacy_format,
             href,
         })
     }
@@ -419,7 +440,14 @@ impl ToSexpr for TextEffects {
             [
                 Some(self.font.to_sexpr()),
                 self.justify.as_ref().map(ToSexpr::to_sexpr),
-                self.hide.then(|| Sexpr::symbol("hide")),
+                // Preserve original format: legacy uses just "hide", newer uses "hide yes/no"
+                if self.hide && self.hide_legacy_format {
+                    Some(Sexpr::symbol("hide"))
+                } else if self.hide {
+                    Some(Sexpr::bool_with_name("hide", true))
+                } else {
+                    None
+                },
                 self.href
                     .as_ref()
                     .map(|h| Sexpr::string_with_name("href", h)),
@@ -446,8 +474,12 @@ pub struct Font {
     pub thickness: Option<f32>,
     /// The `bold` token specifies if the font should be bold.
     pub bold: bool,
+    /// Whether the bold was in legacy format (just "bold") vs new format ("bold yes/no")
+    pub bold_legacy_format: bool,
     /// The `italic` token specifies if the font should be italicized.
     pub italic: bool,
+    /// Whether the italic was in legacy format (just "italic") vs new format ("italic yes/no")
+    pub italic_legacy_format: bool,
     /// UNDOCUMENTED: The `color` token specifies the color of the text.
     pub color: Option<Color>,
 }
@@ -460,8 +492,22 @@ impl FromSexpr for Font {
         let size = parser.expect_with_name::<Vec2D>("size")?;
         let line_spacing = parser.maybe_number_with_name("line_spacing")?;
         let thickness = parser.maybe_number_with_name("thickness")?;
-        let bold = parser.maybe_symbol_matching("bold");
-        let italic = parser.maybe_symbol_matching("italic");
+        // Handle both old format (bold) and new format (bold yes/no)
+        let (bold, bold_legacy_format) = if parser.maybe_symbol_matching("bold") {
+            (true, true)
+        } else if let Some(bold_value) = parser.maybe_bool_with_name("bold")? {
+            (bold_value, false)
+        } else {
+            (false, false)
+        };
+        // Handle both old format (italic) and new format (italic yes/no)
+        let (italic, italic_legacy_format) = if parser.maybe_symbol_matching("italic") {
+            (true, true)
+        } else if let Some(italic_value) = parser.maybe_bool_with_name("italic")? {
+            (italic_value, false)
+        } else {
+            (false, false)
+        };
         let color = parser.maybe::<Color>()?;
 
         parser.expect_end()?;
@@ -472,7 +518,9 @@ impl FromSexpr for Font {
             line_spacing,
             thickness,
             bold,
+            bold_legacy_format,
             italic,
+            italic_legacy_format,
             color,
         })
     }
@@ -491,8 +539,22 @@ impl ToSexpr for Font {
                     .map(|l| Sexpr::number_with_name("line_spacing", l)),
                 self.thickness
                     .map(|t| Sexpr::number_with_name("thickness", t)),
-                self.bold.then(|| Sexpr::symbol("bold")),
-                self.italic.then(|| Sexpr::symbol("italic")),
+                // Preserve original format: legacy uses just "bold", newer uses "bold yes/no"
+                if self.bold && self.bold_legacy_format {
+                    Some(Sexpr::symbol("bold"))
+                } else if self.bold {
+                    Some(Sexpr::bool_with_name("bold", true))
+                } else {
+                    None
+                },
+                // Preserve original format: legacy uses just "italic", newer uses "italic yes/no"
+                if self.italic && self.italic_legacy_format {
+                    Some(Sexpr::symbol("italic"))
+                } else if self.italic {
+                    Some(Sexpr::bool_with_name("italic", true))
+                } else {
+                    None
+                },
                 self.color.as_ref().map(ToSexpr::to_sexpr),
             ],
         )
