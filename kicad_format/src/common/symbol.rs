@@ -27,10 +27,16 @@ pub struct LibSymbol {
     pub power: bool,
     pub hide_pin_numbers: bool,
     pub pin_names: Option<PinNames>,
+    pub exclude_from_sim: Option<bool>,
     pub in_bom: bool,
     pub on_board: bool,
     pub properties: Vec<SymbolProperty>,
+    /// Graphics items directly in the symbol (alternative to units)
+    pub graphic_items: Vec<LibSymbolGraphicsItem>,
+    /// Pins directly in the symbol (alternative to units)
+    pub pins: Vec<Pin>,
     pub units: Vec<LibSymbolSubUnit>,
+    pub embedded_fonts: Option<bool>,
 }
 
 impl FromSexpr for LibSymbol {
@@ -42,17 +48,31 @@ impl FromSexpr for LibSymbol {
         let hide_pin_numbers = parser
             .maybe_list_with_name("pin_numbers")
             .map(|mut p| {
-                p.expect_symbol_matching("hide")?;
+                // Handle both old format (hide) and new format (hide yes)
+                let hide = if p.maybe_symbol_matching("hide") {
+                    true
+                } else if let Some(hide_value) = p.maybe_bool_with_name("hide")? {
+                    hide_value
+                } else {
+                    return Err(KiCadParseError::NonMatchingSymbol {
+                        expected: "hide".to_string(),
+                        found: "unknown".to_string(),
+                    });
+                };
                 p.expect_end()?;
-                Ok::<_, KiCadParseError>(())
+                Ok::<_, KiCadParseError>(hide)
             })
             .transpose()?
-            .is_some();
+            .unwrap_or(false);
         let pin_names = parser.maybe::<PinNames>()?;
+        let exclude_from_sim = parser.maybe_bool_with_name("exclude_from_sim")?;
         let in_bom = parser.expect_bool_with_name("in_bom")?;
         let on_board = parser.expect_bool_with_name("on_board")?;
         let properties = parser.expect_many::<SymbolProperty>()?;
+        let graphic_items = parser.expect_many::<LibSymbolGraphicsItem>()?;
+        let pins = parser.expect_many::<Pin>()?;
         let units = parser.expect_many::<LibSymbolSubUnit>()?;
+        let embedded_fonts = parser.maybe_bool_with_name("embedded_fonts")?;
 
         parser.expect_end()?;
 
@@ -61,10 +81,14 @@ impl FromSexpr for LibSymbol {
             power,
             hide_pin_numbers,
             pin_names,
+            exclude_from_sim,
             in_bom,
             on_board,
             properties,
+            graphic_items,
+            pins,
             units,
+            embedded_fonts,
         })
     }
 }
@@ -82,11 +106,17 @@ impl ToSexpr for LibSymbol {
                     self.hide_pin_numbers
                         .then(|| Sexpr::symbol_with_name("pin_numbers", "hide")),
                     self.pin_names.as_ref().map(ToSexpr::to_sexpr),
+                    self.exclude_from_sim.map(|v| Sexpr::bool_with_name("exclude_from_sim", v)),
                     Some(Sexpr::bool_with_name("in_bom", self.in_bom)),
                     Some(Sexpr::bool_with_name("on_board", self.on_board)),
                 ][..],
                 &self.properties.into_sexpr_vec(),
+                &self.graphic_items.into_sexpr_vec(),
+                &self.pins.into_sexpr_vec(),
                 &self.units.into_sexpr_vec(),
+                &[
+                    self.embedded_fonts.map(|v| Sexpr::bool_with_name("embedded_fonts", v)),
+                ][..],
             ]
             .concat(),
         )
@@ -325,6 +355,8 @@ mod unit_id_tests {
 pub struct PinNames {
     pub offset: Option<f32>,
     pub hide: bool,
+    /// Whether the hide was in legacy format (just "hide") vs new format ("hide yes/no")
+    pub hide_legacy_format: bool,
 }
 
 impl FromSexpr for PinNames {
@@ -332,11 +364,18 @@ impl FromSexpr for PinNames {
         parser.expect_symbol_matching("pin_names")?;
 
         let offset = parser.maybe_number_with_name("offset")?;
-        let hide = parser.maybe_symbol_matching("hide");
+        // Handle both old format (hide) and new format (hide yes)
+        let (hide, hide_legacy_format) = if parser.maybe_symbol_matching("hide") {
+            (true, true)
+        } else if let Some(hide_value) = parser.maybe_bool_with_name("hide")? {
+            (hide_value, false)
+        } else {
+            (false, false)
+        };
 
         parser.expect_end()?;
 
-        Ok(Self { offset, hide })
+        Ok(Self { offset, hide, hide_legacy_format })
     }
 }
 
@@ -348,7 +387,14 @@ impl ToSexpr for PinNames {
             "pin_names",
             [
                 self.offset.map(|o| Sexpr::number_with_name("offset", o)),
-                self.hide.then(|| Sexpr::symbol("hide")),
+                // Preserve original format: legacy uses just "hide", newer uses "hide yes/no"
+                if self.hide && self.hide_legacy_format {
+                    Some(Sexpr::symbol("hide"))
+                } else if self.hide {
+                    Some(Sexpr::bool_with_name("hide", true))
+                } else {
+                    None
+                },
             ],
         )
     }
@@ -379,6 +425,8 @@ pub struct SymbolProperty {
     pub do_not_autoplace: bool,
     /// The `TEXT_EFFECTS` section defines how the text is displayed.
     pub effects: TextEffects,
+    /// Legacy ID field for older KiCad formats (pre-version 6.0)
+    pub legacy_id: Option<i32>,
 }
 
 impl FromSexpr for SymbolProperty {
@@ -387,6 +435,10 @@ impl FromSexpr for SymbolProperty {
 
         let key = parser.expect_string()?;
         let value = parser.expect_string()?;
+        
+        // Handle legacy format with (id X) before position
+        let legacy_id = parser.maybe_number_with_name("id")?.map(|n| n as i32);
+        
         let position = parser.expect::<Position>()?;
         let show_name = parser.maybe_empty_list_with_name("show_name")?;
         let do_not_autoplace = parser.maybe_empty_list_with_name("do_not_autoplace")?;
@@ -401,6 +453,7 @@ impl FromSexpr for SymbolProperty {
             show_name,
             do_not_autoplace,
             effects,
+            legacy_id,
         })
     }
 }
@@ -414,6 +467,7 @@ impl ToSexpr for SymbolProperty {
             [
                 Some(Sexpr::string(&self.key)),
                 Some(Sexpr::string(&self.value)),
+                self.legacy_id.map(|id| Sexpr::number_with_name("id", id as f32)),
                 Some(self.position.to_sexpr()),
                 self.show_name
                     .then(|| Sexpr::list_with_name("show_name", [])),
@@ -543,6 +597,7 @@ pub struct LibSymbolTextBox {
     pub text: String,
     pub position: Position,
     pub size: Vec2D,
+    pub margins: Option<(f32, f32, f32, f32)>,
     pub stroke: Stroke,
     pub fill: ShapeFillMode,
     pub effects: TextEffects,
@@ -556,6 +611,19 @@ impl FromSexpr for LibSymbolTextBox {
         let text = parser.expect_string()?;
         let position = parser.expect::<Position>()?;
         let size = parser.expect_with_name::<Vec2D>("size")?;
+        
+        // Parse optional margins (left, top, right, bottom)
+        let margins = parser.maybe_list_with_name("margins")
+            .map(|mut p| {
+                let left = p.expect_number()? as f32;
+                let top = p.expect_number()? as f32;
+                let right = p.expect_number()? as f32;
+                let bottom = p.expect_number()? as f32;
+                p.expect_end()?;
+                Ok::<_, KiCadParseError>((left, top, right, bottom))
+            })
+            .transpose()?;
+        
         let stroke = parser.expect::<Stroke>()?;
         let fill = parser.expect::<ShapeFillMode>()?;
         let effects = parser.expect::<TextEffects>()?;
@@ -567,6 +635,7 @@ impl FromSexpr for LibSymbolTextBox {
             text,
             position,
             size,
+            margins,
             stroke,
             fill,
             effects,
@@ -583,6 +652,17 @@ impl ToSexpr for LibSymbolTextBox {
                 Some(Sexpr::string(&self.text)),
                 Some(self.position.to_sexpr()),
                 Some(self.size.to_sexpr_with_name("size")),
+                self.margins.map(|(l, t, r, b)| {
+                    Sexpr::list_with_name(
+                        "margins",
+                        [
+                            Some(Sexpr::number(l)),
+                            Some(Sexpr::number(t)),
+                            Some(Sexpr::number(r)),
+                            Some(Sexpr::number(b)),
+                        ],
+                    )
+                }),
                 Some(self.stroke.to_sexpr()),
                 Some(self.fill.to_sexpr()),
                 Some(self.effects.to_sexpr()),
@@ -617,6 +697,8 @@ pub struct Pin {
     pub length: f32,
     /// UNDOCUMENTED
     pub hide: bool,
+    /// Whether the hide was in legacy format (just "hide") vs new format ("hide yes/no")
+    pub hide_legacy_format: bool,
     /// The name token defines a quoted string containing the NAME of the pin
     /// and the TEXT_EFFECTS defines how the text is displayed.
     pub name: String,
@@ -637,7 +719,14 @@ impl FromSexpr for Pin {
         let graphical_style = parser.expect_symbol()?.parse::<PinGraphicalStyle>()?;
         let position = parser.expect::<Position>()?;
         let length = parser.expect_number_with_name("length")?;
-        let hide = parser.maybe_symbol_matching("hide");
+        // Handle both old format (hide) and new format (hide yes/no)
+        let (hide, hide_legacy_format) = if parser.maybe_symbol_matching("hide") {
+            (true, true)
+        } else if let Some(hide_value) = parser.maybe_bool_with_name("hide")? {
+            (hide_value, false)
+        } else {
+            (false, false)
+        };
         let (name, name_effects) = parser.expect_list_with_name("name").and_then(|mut p| {
             let name = p.expect_string()?;
             let name_effects = p.expect::<TextEffects>()?;
@@ -663,6 +752,7 @@ impl FromSexpr for Pin {
             position,
             length,
             hide,
+            hide_legacy_format,
             name,
             name_effects,
             number,
@@ -684,7 +774,14 @@ impl ToSexpr for Pin {
                     Some(Sexpr::symbol(self.graphical_style)),
                     Some(self.position.to_sexpr()),
                     Some(Sexpr::number_with_name("length", self.length)),
-                    self.hide.then(|| Sexpr::symbol("hide")),
+                    // Preserve original format: legacy uses just "hide", newer uses "hide yes/no"
+                    if self.hide && self.hide_legacy_format {
+                        Some(Sexpr::symbol("hide"))
+                    } else if self.hide {
+                        Some(Sexpr::bool_with_name("hide", true))
+                    } else {
+                        None
+                    },
                     Some(Sexpr::list_with_name(
                         "name",
                         [

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Bash(find:*)",
+      "Bash(cargo run:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(cargo:*)",
+      "Bash(ls:*)",
+      "Bash(rustc:*)",
+      "Bash(./debug_single)",
+      "Bash(./test_mcu_file)",
+      "Bash(RUST_BACKTRACE=1 cargo test test_symbol_library)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(timeout 60 cargo test test_all_kicad_symbols -- --nocapture)",
+      "Bash(gtimeout 60 cargo test test_all_kicad_symbols -- --nocapture)",
+      "Bash(mv:*)",
+      "Bash(mkdir:*)",
+      "Bash(RUST_BACKTRACE=1 cargo test test_mp34dt06jtr_symbol_parsing -- --nocapture)",
+      "Bash(RUST_BACKTRACE=1 cargo test test_regulator_current_symbol_parsing -- --nocapture)",
+      "Bash(RUST_BACKTRACE=full cargo test test_regulator_current_symbol_parsing -- --nocapture)",
+      "Bash(KICAD_SYMBOL_DIR=\"/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/\" cargo test test_kicad_symbol_dir_parsing -- --nocapture)",
+      "Bash(RUST_BACKTRACE=1 cargo test test_sensor_proximity_parsing -- --nocapture)",
+      "Bash(sed:*)",
+      "Bash(KICAD_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/ cargo test test_kicad_symbol_dir_parsing -- --nocapture 2 >& 1)",
+      "Bash(KICAD_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/ cargo test -r test_kicad_symbol_dir_parsing -- --nocapture 2 >& 1)",
+      "Bash(git checkout:*)"
+    ],
+    "deny": []
+  }
+}
