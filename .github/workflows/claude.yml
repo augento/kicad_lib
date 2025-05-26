@@ -24,6 +24,12 @@ jobs:
       issues: read
       id-token: write
     steps:
+      - name: Install KiCad
+        run: |
+          sudo add-apt-repository ppa:kicad/kicad-9.0-releases
+          sudo apt update
+          sudo apt install kicad
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
