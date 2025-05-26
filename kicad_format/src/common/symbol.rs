@@ -106,7 +106,8 @@ impl ToSexpr for LibSymbol {
                     self.hide_pin_numbers
                         .then(|| Sexpr::symbol_with_name("pin_numbers", "hide")),
                     self.pin_names.as_ref().map(ToSexpr::to_sexpr),
-                    self.exclude_from_sim.map(|v| Sexpr::bool_with_name("exclude_from_sim", v)),
+                    self.exclude_from_sim
+                        .map(|v| Sexpr::bool_with_name("exclude_from_sim", v)),
                     Some(Sexpr::bool_with_name("in_bom", self.in_bom)),
                     Some(Sexpr::bool_with_name("on_board", self.on_board)),
                 ][..],
@@ -114,9 +115,9 @@ impl ToSexpr for LibSymbol {
                 &self.graphic_items.into_sexpr_vec(),
                 &self.pins.into_sexpr_vec(),
                 &self.units.into_sexpr_vec(),
-                &[
-                    self.embedded_fonts.map(|v| Sexpr::bool_with_name("embedded_fonts", v)),
-                ][..],
+                &[self
+                    .embedded_fonts
+                    .map(|v| Sexpr::bool_with_name("embedded_fonts", v))][..],
             ]
             .concat(),
         )
@@ -375,7 +376,11 @@ impl FromSexpr for PinNames {
 
         parser.expect_end()?;
 
-        Ok(Self { offset, hide, hide_legacy_format })
+        Ok(Self {
+            offset,
+            hide,
+            hide_legacy_format,
+        })
     }
 }
 
@@ -435,10 +440,10 @@ impl FromSexpr for SymbolProperty {
 
         let key = parser.expect_string()?;
         let value = parser.expect_string()?;
-        
+
         // Handle legacy format with (id X) before position
         let legacy_id = parser.maybe_number_with_name("id")?.map(|n| n as i32);
-        
+
         let position = parser.expect::<Position>()?;
         let show_name = parser.maybe_empty_list_with_name("show_name")?;
         let do_not_autoplace = parser.maybe_empty_list_with_name("do_not_autoplace")?;
@@ -467,7 +472,8 @@ impl ToSexpr for SymbolProperty {
             [
                 Some(Sexpr::string(&self.key)),
                 Some(Sexpr::string(&self.value)),
-                self.legacy_id.map(|id| Sexpr::number_with_name("id", id as f32)),
+                self.legacy_id
+                    .map(|id| Sexpr::number_with_name("id", id as f32)),
                 Some(self.position.to_sexpr()),
                 self.show_name
                     .then(|| Sexpr::list_with_name("show_name", [])),
@@ -611,9 +617,10 @@ impl FromSexpr for LibSymbolTextBox {
         let text = parser.expect_string()?;
         let position = parser.expect::<Position>()?;
         let size = parser.expect_with_name::<Vec2D>("size")?;
-        
+
         // Parse optional margins (left, top, right, bottom)
-        let margins = parser.maybe_list_with_name("margins")
+        let margins = parser
+            .maybe_list_with_name("margins")
             .map(|mut p| {
                 let left = p.expect_number()? as f32;
                 let top = p.expect_number()? as f32;
@@ -623,7 +630,7 @@ impl FromSexpr for LibSymbolTextBox {
                 Ok::<_, KiCadParseError>((left, top, right, bottom))
             })
             .transpose()?;
-        
+
         let stroke = parser.expect::<Stroke>()?;
         let fill = parser.expect::<ShapeFillMode>()?;
         let effects = parser.expect::<TextEffects>()?;

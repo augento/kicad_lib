@@ -86,10 +86,13 @@ fn test_pcb() {
 #[test]
 fn test_mp34dt06jtr_symbol_parsing() {
     let input = std::fs::read_to_string("./tests/legacy_symbols/MP34DT06JTR.kicad_sym").unwrap();
-    
+
     let result = kicad_sexpr::from_str(&input);
-    assert!(result.is_ok(), "Failed to parse MP34DT06JTR.kicad_sym as S-expression");
-    
+    assert!(
+        result.is_ok(),
+        "Failed to parse MP34DT06JTR.kicad_sym as S-expression"
+    );
+
     let input_sexpr = result.unwrap();
     let parser = Parser::new(input_sexpr.as_list().unwrap().clone());
     let symbol_lib = SymbolLibraryFile::from_sexpr(parser).unwrap();
@@ -99,14 +102,18 @@ fn test_mp34dt06jtr_symbol_parsing() {
 
 #[test]
 fn test_regulator_current_symbol_parsing() {
-    let input = std::fs::read_to_string("./tests/newer_symbols/Regulator_Current.kicad_sym").unwrap();
-    
+    let input =
+        std::fs::read_to_string("./tests/newer_symbols/Regulator_Current.kicad_sym").unwrap();
+
     let result = kicad_sexpr::from_str(&input);
-    assert!(result.is_ok(), "Failed to parse Regulator_Current.kicad_sym as S-expression");
-    
+    assert!(
+        result.is_ok(),
+        "Failed to parse Regulator_Current.kicad_sym as S-expression"
+    );
+
     let input_sexpr = result.unwrap();
     let parser = Parser::new(input_sexpr.as_list().unwrap().clone());
-    
+
     let symbol_lib = SymbolLibraryFile::from_sexpr(parser).unwrap();
     let output_sexpr = symbol_lib.to_sexpr();
     assert_sexprs_eq(input_sexpr, output_sexpr);
@@ -115,13 +122,16 @@ fn test_regulator_current_symbol_parsing() {
 #[test]
 fn test_mcu_nxp_ntag_symbol_parsing() {
     let input = std::fs::read_to_string("./tests/newer_symbols/MCU_NXP_NTAG.kicad_sym").unwrap();
-    
+
     let result = kicad_sexpr::from_str(&input);
-    assert!(result.is_ok(), "Failed to parse MCU_NXP_NTAG.kicad_sym as S-expression");
-    
+    assert!(
+        result.is_ok(),
+        "Failed to parse MCU_NXP_NTAG.kicad_sym as S-expression"
+    );
+
     let input_sexpr = result.unwrap();
     let parser = Parser::new(input_sexpr.as_list().unwrap().clone());
-    
+
     let symbol_lib = SymbolLibraryFile::from_sexpr(parser).unwrap();
     let output_sexpr = symbol_lib.to_sexpr();
     assert_sexprs_eq(input_sexpr, output_sexpr);
@@ -130,18 +140,20 @@ fn test_mcu_nxp_ntag_symbol_parsing() {
 #[test]
 fn test_gpu_symbol_parsing() {
     let input = std::fs::read_to_string("./tests/symbol_library/GPU.kicad_sym").unwrap();
-    
+
     let result = kicad_sexpr::from_str(&input);
-    assert!(result.is_ok(), "Failed to parse GPU.kicad_sym as S-expression");
-    
+    assert!(
+        result.is_ok(),
+        "Failed to parse GPU.kicad_sym as S-expression"
+    );
+
     let input_sexpr = result.unwrap();
     let parser = Parser::new(input_sexpr.as_list().unwrap().clone());
-    
+
     let symbol_lib = SymbolLibraryFile::from_sexpr(parser).unwrap();
     let output_sexpr = symbol_lib.to_sexpr();
     assert_sexprs_eq(input_sexpr, output_sexpr);
 }
-
 
 #[test]
 fn test_pin_hide_parsing() {
@@ -164,11 +176,11 @@ fn test_pin_hide_parsing() {
             )
         )
     )"#;
-    
+
     let sexpr = kicad_sexpr::from_str(test_pin).unwrap();
     let list = sexpr.as_list().unwrap();
     let parser = Parser::new(list.clone());
-    
+
     use kicad_format::common::symbol::Pin;
     match Pin::from_sexpr(parser) {
         Ok(pin) => {
@@ -191,21 +203,23 @@ fn test_sensor_property_parsing() {
             (hide yes)
         )
     )"#;
-    
+
     let sexpr = kicad_sexpr::from_str(test_property).unwrap();
     let list = sexpr.as_list().unwrap();
     let parser = Parser::new(list.clone());
-    
+
     use kicad_format::common::symbol::SymbolProperty;
     match SymbolProperty::from_sexpr(parser) {
         Ok(prop) => {
             let output_sexpr = prop.to_sexpr();
-            assert_eq!(sexpr, output_sexpr, "Round-trip mismatch for SymbolProperty");
+            assert_eq!(
+                sexpr, output_sexpr,
+                "Round-trip mismatch for SymbolProperty"
+            );
         }
         Err(e) => panic!("Error parsing SymbolProperty: {:?}", e),
     }
 }
-
 
 #[test]
 fn test_texteffects_hide_no_justify() {
@@ -215,16 +229,19 @@ fn test_texteffects_hide_no_justify() {
         )
         (hide yes)
     )"#;
-    
+
     let sexpr = kicad_sexpr::from_str(test_effects).unwrap();
     let list = sexpr.as_list().unwrap();
     let parser = Parser::new(list.clone());
-    
+
     let effects = TextEffects::from_sexpr(parser).unwrap();
-    
+
     // Test round-trip
     let output_sexpr = effects.to_sexpr();
-    assert_eq!(sexpr, output_sexpr, "Round-trip mismatch for TextEffects without justify");
+    assert_eq!(
+        sexpr, output_sexpr,
+        "Round-trip mismatch for TextEffects without justify"
+    );
 }
 
 #[test]
@@ -236,18 +253,17 @@ fn test_texteffects_hide_yes() {
         (justify left)
         (hide yes)
     )"#;
-    
+
     let sexpr = kicad_sexpr::from_str(test_effects).unwrap();
     let list = sexpr.as_list().unwrap();
     let parser = Parser::new(list.clone());
-    
+
     let effects = TextEffects::from_sexpr(parser).unwrap();
-    
+
     // Test round-trip
     let output_sexpr = effects.to_sexpr();
     assert_eq!(sexpr, output_sexpr, "Round-trip mismatch for TextEffects");
 }
-
 
 #[test]
 fn test_kicad_symbol_dir_parsing() {
@@ -259,19 +275,19 @@ fn test_kicad_symbol_dir_parsing() {
             return;
         }
     };
-    
+
     // Testing symbol files in directory
-    
+
     let symbol_path = std::path::Path::new(&symbol_dir);
     if !symbol_path.exists() {
         // Directory does not exist, skipping test
         return;
     }
-    
-    let mut total_files = 0;
-    let mut successful_files = 0;
+
+    let mut _total_files = 0;
+    let mut _successful_files = 0;
     let mut failed_files = Vec::new();
-    
+
     // Read all .kicad_sym files in the directory
     let entries = match std::fs::read_dir(symbol_path) {
         Ok(entries) => entries,
@@ -280,7 +296,7 @@ fn test_kicad_symbol_dir_parsing() {
             return;
         }
     };
-    
+
     for entry in entries {
         let entry = match entry {
             Ok(entry) => entry,
@@ -289,49 +305,54 @@ fn test_kicad_symbol_dir_parsing() {
                 continue;
             }
         };
-        
+
         let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) == Some("kicad_sym") {
-            total_files += 1;
-            
+            _total_files += 1;
+
             let file_name = path.file_name().unwrap().to_string_lossy();
-            
+
             match std::fs::read_to_string(&path) {
-                Ok(content) => {
-                    match kicad_sexpr::from_str(&content) {
-                        Ok(input_sexpr) => {
-                            match input_sexpr.as_list() {
-                                Some(list) => {
-                                    let parser = Parser::new(list.clone());
-                                    match SymbolLibraryFile::from_sexpr(parser) {
-                                        Ok(_symbol_lib) => {
-                                            successful_files += 1;
-                                        }
-                                        Err(e) => {
-                                            failed_files.push((file_name.to_string(), format!("Parser error: {}", e)));
-                                        }
-                                    }
+                Ok(content) => match kicad_sexpr::from_str(&content) {
+                    Ok(input_sexpr) => match input_sexpr.as_list() {
+                        Some(list) => {
+                            let parser = Parser::new(list.clone());
+                            match SymbolLibraryFile::from_sexpr(parser) {
+                                Ok(_symbol_lib) => {
+                                    _successful_files += 1;
                                 }
-                                None => {
-                                    failed_files.push((file_name.to_string(), "Not a valid S-expression list".to_string()));
+                                Err(e) => {
+                                    failed_files.push((
+                                        file_name.to_string(),
+                                        format!("Parser error: {}", e),
+                                    ));
                                 }
                             }
                         }
-                        Err(e) => {
-                            failed_files.push((file_name.to_string(), format!("S-expression parse error: {}", e)));
+                        None => {
+                            failed_files.push((
+                                file_name.to_string(),
+                                "Not a valid S-expression list".to_string(),
+                            ));
                         }
+                    },
+                    Err(e) => {
+                        failed_files.push((
+                            file_name.to_string(),
+                            format!("S-expression parse error: {}", e),
+                        ));
                     }
-                }
+                },
                 Err(e) => {
                     failed_files.push((file_name.to_string(), format!("File read error: {}", e)));
                 }
             }
         }
     }
-    
+
     // Summary: Total files: total_files, Success: successful_files, Failed: failed_files.len()
     // The test doesn't fail on parsing errors - we just count them
-    
+
     // The test doesn't fail on parsing errors - we just report them
     // This allows us to see what needs to be fixed without failing the test suite
 }

@@ -49,7 +49,11 @@ impl FromSexpr for SymbolLibraryFile {
                         gen_parser.expect_end()?;
                         (s, false)
                     }
-                    _ => return Err(KiCadParseError::UnexpectedSexprType { expected: crate::SexprKind::String }),
+                    _ => {
+                        return Err(KiCadParseError::UnexpectedSexprType {
+                            expected: crate::SexprKind::String,
+                        })
+                    }
                 }
             } else {
                 return Err(KiCadParseError::UnexpectedEndOfList);
@@ -83,7 +87,9 @@ impl ToSexpr for SymbolLibraryFile {
                     } else {
                         Sexpr::symbol_with_name("generator", &self.generator)
                     }),
-                    self.generator_version.as_ref().map(|v| Sexpr::string_with_name("generator_version", v)),
+                    self.generator_version
+                        .as_ref()
+                        .map(|v| Sexpr::string_with_name("generator_version", v)),
                 ][..],
                 &self.symbols.into_sexpr_vec(),
             ]

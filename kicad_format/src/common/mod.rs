@@ -395,9 +395,13 @@ impl TextEffects {
     pub fn with_hide(self, hide: bool) -> Self {
         Self { hide, ..self }
     }
-    
+
     pub fn with_hide_legacy(self, hide: bool) -> Self {
-        Self { hide, hide_legacy_format: true, ..self }
+        Self {
+            hide,
+            hide_legacy_format: true,
+            ..self
+        }
     }
 }
 
