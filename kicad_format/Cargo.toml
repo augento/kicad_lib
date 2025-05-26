@@ -17,7 +17,12 @@ uuid = { version = "1.8.0", features = ["v4", "fast-rng"] }
 [dev-dependencies]
 ansi_term = "0.12.1"
 diff = "0.1.13"
+criterion = "0.5"
 
+
+[[bench]]
+name = "symbol_library_bench"
+harness = false
 
 [features]
 serde = ["dep:serde", "uuid/serde"]

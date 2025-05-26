@@ -42,7 +42,7 @@ impl SexprListExt for SexprList {
 /// A parser used internally for easily lifting fields out of S-expression trees.
 #[derive(Debug, Clone)]
 pub struct Parser {
-    inner: Peekable<IntoIter<Sexpr>>,
+    pub(crate) inner: Peekable<IntoIter<Sexpr>>,
 }
 
 impl Parser {
