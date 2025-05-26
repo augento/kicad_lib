@@ -28,7 +28,9 @@ jobs:
         run: |
           sudo add-apt-repository ppa:kicad/kicad-9.0-releases
           sudo apt update
-          sudo apt install -y kicad
+          sudo apt install kicad
+        env:
+          DEBIAN_FRONTEND: noninteractive
 
       - name: Checkout repository
         uses: actions/checkout@v4
