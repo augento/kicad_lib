@@ -27,8 +27,8 @@ jobs:
       - name: Install KiCad
         run: |
           sudo add-apt-repository ppa:kicad/kicad-9.0-releases
-          sudo apt update
-          sudo apt install kicad
+          sudo apt-get update -y
+          sudo apt-get install -y kicad 
         env:
           DEBIAN_FRONTEND: noninteractive
 
