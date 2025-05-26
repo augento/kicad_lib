@@ -24,13 +24,8 @@ jobs:
       issues: read
       id-token: write
     steps:
-      - name: Install KiCad
-        run: |
-          sudo add-apt-repository ppa:kicad/kicad-9.0-releases
-          sudo apt-get update -y
-          sudo apt-get install -y kicad 
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      - name: KiCad actions
+        uses: actions-for-kicad/kicad-actions@v1.3-k9.0
 
       - name: Checkout repository
         uses: actions/checkout@v4
