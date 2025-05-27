@@ -26,7 +26,8 @@
       "Bash(sed:*)",
       "Bash(KICAD_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/ cargo test test_kicad_symbol_dir_parsing -- --nocapture 2 >& 1)",
       "Bash(KICAD_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/ cargo test -r test_kicad_symbol_dir_parsing -- --nocapture 2 >& 1)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

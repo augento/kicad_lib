@@ -178,6 +178,38 @@ impl<'a> ParserRef<'a> {
         self.expect_list_with_name(name)?.expect_symbol()
     }
     
+    pub fn maybe_bool_with_name(&mut self, name: &str) -> Result<Option<bool>, KiCadParseError> {
+        self.maybe_list_with_name(name)
+            .map(|mut d| {
+                let result = d.expect_symbol()?;
+                match result {
+                    "yes" => Ok(true),
+                    "no" => Ok(false),
+                    _ => Err(KiCadParseError::InvalidEnumValue {
+                        value: result.to_string(),
+                        enum_name: "bool",
+                    }),
+                }
+            })
+            .transpose()
+    }
+    
+    pub fn maybe_number_with_name(&mut self, name: &str) -> Option<f32> {
+        self.maybe_list_with_name(name)?.expect_number().ok()
+    }
+    
+    pub fn maybe_symbol_matching(&mut self, expected: &str) -> bool {
+        if let Some(&sexpr) = self.peek_next() {
+            if let Sexpr::Symbol(symbol) = sexpr {
+                if symbol.as_str() == expected {
+                    self.inner.next();
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    
     pub fn expect<T>(&mut self) -> Result<T, KiCadParseError>
     where
         T: FromSexprRef<'a>,

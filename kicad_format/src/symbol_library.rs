@@ -145,10 +145,12 @@ impl FromSexpr for SymbolDefinition {
                 .transpose()?
                 .is_some();
             let pin_names = parser.maybe::<PinNames>()?;
+            let exclude_from_sim = parser.maybe_bool_with_name("exclude_from_sim")?;
             let in_bom = parser.expect_bool_with_name("in_bom")?;
             let on_board = parser.expect_bool_with_name("on_board")?;
             let properties = parser.expect_many::<SymbolProperty>()?;
             let units = parser.expect_many::<LibSymbolSubUnit>()?;
+            let embedded_fonts = parser.maybe_bool_with_name("embedded_fonts")?;
             parser.expect_end()?;
             
             Ok(Self::RootSymbol(LibSymbol {
@@ -156,10 +158,14 @@ impl FromSexpr for SymbolDefinition {
                 power,
                 hide_pin_numbers,
                 pin_names,
+                exclude_from_sim,
                 in_bom,
                 on_board,
                 properties,
+                graphic_items: Vec::new(),
+                pins: Vec::new(),
                 units,
+                embedded_fonts,
             }))
         }
     }

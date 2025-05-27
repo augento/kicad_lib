@@ -26,6 +26,8 @@ use crate::{
 pub struct SymbolLibraryFileFast {
     pub version: u32,
     pub generator: String,
+    pub generator_is_string: bool,
+    pub generator_version: Option<String>,
     pub symbols: Vec<SymbolDefinitionFast>,
 }
 
@@ -34,7 +36,36 @@ impl<'a> FromSexprRef<'a> for SymbolLibraryFileFast {
         parser.expect_symbol_matching("kicad_symbol_lib")?;
 
         let version = parser.expect_number_with_name("version")? as u32;
-        let generator = parser.expect_symbol_with_name("generator")?.to_string();
+        
+        // Handle both old format (symbol) and new format (string) for generator
+        let (generator, generator_is_string) = {
+            let mut gen_parser = parser.expect_list_with_name("generator")?;
+            // Peek to see if it's a string or symbol
+            let next = gen_parser.peek_next();
+            if let Some(&sexpr) = next {
+                match sexpr {
+                    kicad_sexpr::Sexpr::String(_) => {
+                        let s = gen_parser.expect_string()?.to_string();
+                        gen_parser.expect_end()?;
+                        (s, true)
+                    }
+                    kicad_sexpr::Sexpr::Symbol(_) => {
+                        let s = gen_parser.expect_symbol()?.to_string();
+                        gen_parser.expect_end()?;
+                        (s, false)
+                    }
+                    _ => {
+                        return Err(KiCadParseError::UnexpectedSexprType {
+                            expected: crate::SexprKind::String,
+                        })
+                    }
+                }
+            } else {
+                return Err(KiCadParseError::UnexpectedEndOfList);
+            }
+        };
+        
+        let generator_version = parser.maybe_string_with_name("generator_version").map(|s| s.to_string());
         let symbols = parser.expect_many::<SymbolDefinitionFast>()?;
 
         parser.expect_end()?;
@@ -42,6 +73,8 @@ impl<'a> FromSexprRef<'a> for SymbolLibraryFileFast {
         Ok(Self {
             version,
             generator,
+            generator_is_string,
+            generator_version,
             symbols,
         })
     }
@@ -54,7 +87,15 @@ impl ToSexpr for SymbolLibraryFileFast {
             [
                 &[
                     Some(Sexpr::number_with_name("version", self.version as f32)),
-                    Some(Sexpr::symbol_with_name("generator", &self.generator)),
+                    // Preserve original format: string vs symbol
+                    Some(if self.generator_is_string {
+                        Sexpr::string_with_name("generator", &self.generator)
+                    } else {
+                        Sexpr::symbol_with_name("generator", &self.generator)
+                    }),
+                    self.generator_version
+                        .as_ref()
+                        .map(|v| Sexpr::string_with_name("generator_version", v)),
                 ][..],
                 &self.symbols.into_sexpr_vec(),
             ]
@@ -110,21 +151,34 @@ impl<'a> FromSexprRef<'a> for SymbolDefinitionFast {
                 .transpose()?
                 .is_some();
             let pin_names = parser.maybe::<PinNamesFast>()?;
+            let exclude_from_sim = parser.maybe_bool_with_name("exclude_from_sim")?;
             let in_bom = parser.expect_bool_with_name("in_bom")?;
             let on_board = parser.expect_bool_with_name("on_board")?;
             let properties = parser.expect_many::<SymbolPropertyFast>()?;
+            // For now, skip parsing graphic items and pins - would need more work
+            let graphic_items = vec![];
+            let pins = vec![];
             let units = parser.expect_many::<LibSymbolSubUnitFast>()?;
-            parser.expect_end()?;
+            let embedded_fonts = parser.maybe_bool_with_name("embedded_fonts")?;
+            
+            // Skip any remaining items (graphic_items, pins) that we haven't parsed
+            while parser.peek_next().is_some() {
+                parser.expect_next()?;
+            }
             
             Ok(Self::RootSymbol(LibSymbolFast {
                 id,
                 power,
                 hide_pin_numbers,
                 pin_names,
+                exclude_from_sim,
                 in_bom,
                 on_board,
                 properties,
+                graphic_items,
+                pins,
                 units,
+                embedded_fonts,
             }))
         }
     }
@@ -154,37 +208,42 @@ pub struct LibSymbolFast {
     pub power: bool,
     pub hide_pin_numbers: bool,
     pub pin_names: Option<PinNamesFast>,
+    pub exclude_from_sim: Option<bool>,
     pub in_bom: bool,
     pub on_board: bool,
     pub properties: Vec<SymbolPropertyFast>,
+    pub graphic_items: Vec<LibSymbolGraphicsItem>,
+    pub pins: Vec<Pin>,
     pub units: Vec<LibSymbolSubUnitFast>,
+    pub embedded_fonts: Option<bool>,
 }
 
 impl ToSexpr for LibSymbolFast {
     fn to_sexpr(&self) -> Sexpr {
-        let mut elements = vec![
-            Some(self.id.to_sexpr()),
-        ];
-        
-        if self.power {
-            elements.push(Some(Sexpr::list_with_name("power", vec![])));
-        }
-        
-        if self.hide_pin_numbers {
-            elements.push(Some(Sexpr::symbol_with_name("pin_numbers", "hide")));
-        }
-        
-        if let Some(ref pin_names) = self.pin_names {
-            elements.push(Some(pin_names.to_sexpr()));
-        }
-        
-        elements.push(Some(Sexpr::bool_with_name("in_bom", self.in_bom)));
-        elements.push(Some(Sexpr::bool_with_name("on_board", self.on_board)));
-        
-        elements.extend(self.properties.iter().map(|p| Some(p.to_sexpr())));
-        elements.extend(self.units.iter().map(|u| Some(u.to_sexpr())));
-        
-        Sexpr::list_with_name("symbol", elements)
+        Sexpr::list_with_name(
+            "symbol",
+            [
+                &[
+                    Some(self.id.to_sexpr()),
+                    self.power.then(|| Sexpr::list_with_name("power", [])),
+                    self.hide_pin_numbers
+                        .then(|| Sexpr::symbol_with_name("pin_numbers", "hide")),
+                    self.pin_names.as_ref().map(ToSexpr::to_sexpr),
+                    self.exclude_from_sim
+                        .map(|v| Sexpr::bool_with_name("exclude_from_sim", v)),
+                    Some(Sexpr::bool_with_name("in_bom", self.in_bom)),
+                    Some(Sexpr::bool_with_name("on_board", self.on_board)),
+                ][..],
+                &self.properties.into_sexpr_vec(),
+                &self.graphic_items.into_sexpr_vec(),
+                &self.pins.into_sexpr_vec(),
+                &self.units.into_sexpr_vec(),
+                &[self
+                    .embedded_fonts
+                    .map(|v| Sexpr::bool_with_name("embedded_fonts", v))][..],
+            ]
+            .concat(),
+        )
     }
 }
 
@@ -222,6 +281,7 @@ pub struct SymbolPropertyFast {
     pub show_name: bool,
     pub do_not_autoplace: bool,
     pub effects: TextEffects,
+    pub legacy_id: Option<i32>,
 }
 
 impl<'a> FromSexprRef<'a> for SymbolPropertyFast {
@@ -230,6 +290,9 @@ impl<'a> FromSexprRef<'a> for SymbolPropertyFast {
         
         let key = intern_property_key(parser.expect_string()?);
         let value = parser.expect_string()?.to_string();
+        
+        // Handle legacy format with (id X) before position
+        let legacy_id = parser.maybe_number_with_name("id").map(|n| n as i32);
         
         // Parse position
         let mut position_parser = parser.expect_list_with_name("at")?;
@@ -262,6 +325,7 @@ impl<'a> FromSexprRef<'a> for SymbolPropertyFast {
             show_name,
             do_not_autoplace,
             effects,
+            legacy_id,
         })
     }
 }
@@ -279,6 +343,8 @@ impl ToSexpr for SymbolPropertyFast {
             [
                 Some(Sexpr::string(self.key.as_str())),
                 Some(Sexpr::string(&self.value)),
+                self.legacy_id
+                    .map(|id| Sexpr::number_with_name("id", id as f32)),
                 Some(self.position.to_sexpr()),
                 self.show_name
                     .then(|| Sexpr::list_with_name("show_name", vec![])),
@@ -297,46 +363,27 @@ impl ToSexpr for SymbolPropertyFast {
 pub struct PinNamesFast {
     pub offset: Option<f32>,
     pub hide: bool,
+    pub hide_legacy_format: bool,
 }
 
 impl<'a> FromSexprRef<'a> for PinNamesFast {
     fn from_sexpr_ref(mut parser: ParserRef<'a>) -> Result<Self, KiCadParseError> {
         parser.expect_symbol_matching("pin_names")?;
         
-        let mut offset = None;
-        let mut hide = false;
+        let offset = parser.maybe_number_with_name("offset");
         
-        while let Some(&next) = parser.peek_next() {
-            if let Sexpr::List(list) = next {
-                if let Some(Sexpr::Symbol(sym)) = list.first() {
-                    match sym.as_str() {
-                        "offset" => {
-                            offset = Some(parser.expect_number_with_name("offset")?);
-                        }
-                        "hide" => {
-                            parser.expect_list_with_name("hide")?.expect_end()?;
-                            hide = true;
-                        }
-                        _ => break,
-                    }
-                } else {
-                    break;
-                }
-            } else if let Sexpr::Symbol(sym) = next {
-                if sym == "hide" {
-                    parser.expect_symbol_matching("hide")?;
-                    hide = true;
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
+        // Check for old format (hide) vs new format (hide yes/no)
+        let (hide, hide_legacy_format) = if parser.maybe_symbol_matching("hide") {
+            (true, true)
+        } else if let Some(hide_value) = parser.maybe_bool_with_name("hide")? {
+            (hide_value, false)
+        } else {
+            (false, false)
+        };
         
         parser.expect_end()?;
         
-        Ok(Self { offset, hide })
+        Ok(Self { offset, hide, hide_legacy_format })
     }
 }
 
@@ -348,17 +395,20 @@ impl<'a> MaybeFromSexprRef<'a> for PinNamesFast {
 
 impl ToSexpr for PinNamesFast {
     fn to_sexpr(&self) -> Sexpr {
-        let mut elements = vec![];
-        
-        if let Some(offset) = self.offset {
-            elements.push(Some(Sexpr::number_with_name("offset", offset)));
-        }
-        
-        if self.hide {
-            elements.push(Some(Sexpr::symbol("hide")));
-        }
-        
-        Sexpr::list_with_name("pin_names", elements)
+        Sexpr::list_with_name(
+            "pin_names",
+            [
+                self.offset.map(|o| Sexpr::number_with_name("offset", o)),
+                // Preserve original format: legacy uses just "hide", newer uses "hide yes/no"
+                if self.hide && self.hide_legacy_format {
+                    Some(Sexpr::symbol("hide"))
+                } else if self.hide {
+                    Some(Sexpr::bool_with_name("hide", true))
+                } else {
+                    None
+                },
+            ],
+        )
     }
 }
 
@@ -443,6 +493,8 @@ impl From<SymbolLibraryFileFast> for crate::symbol_library::SymbolLibraryFile {
         Self {
             version: fast.version,
             generator: fast.generator,
+            generator_is_string: fast.generator_is_string,
+            generator_version: fast.generator_version,
             symbols: fast.symbols.into_iter().map(|s| s.into()).collect(),
         }
     }
@@ -468,10 +520,14 @@ impl From<LibSymbolFast> for LibSymbol {
             power: fast.power,
             hide_pin_numbers: fast.hide_pin_numbers,
             pin_names: fast.pin_names.map(|p| p.into()),
+            exclude_from_sim: fast.exclude_from_sim,
             in_bom: fast.in_bom,
             on_board: fast.on_board,
             properties: fast.properties.into_iter().map(|p| p.into()).collect(),
+            graphic_items: fast.graphic_items,
+            pins: fast.pins,
             units: fast.units.into_iter().map(|u| u.into()).collect(),
+            embedded_fonts: fast.embedded_fonts,
         }
     }
 }
@@ -495,6 +551,7 @@ impl From<SymbolPropertyFast> for SymbolProperty {
             show_name: fast.show_name,
             do_not_autoplace: fast.do_not_autoplace,
             effects: fast.effects,
+            legacy_id: fast.legacy_id,
         }
     }
 }
@@ -504,6 +561,7 @@ impl From<PinNamesFast> for PinNames {
         Self {
             offset: fast.offset,
             hide: fast.hide,
+            hide_legacy_format: fast.hide_legacy_format,
         }
     }
 }
