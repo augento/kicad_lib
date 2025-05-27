@@ -9,10 +9,13 @@ use thiserror::Error;
 
 pub mod common;
 pub mod convert;
+pub mod convert_ref;
 pub mod footprint_library;
 pub mod pcb;
 pub mod schematic;
+pub mod string_interner;
 pub mod symbol_library;
+pub mod symbol_library_fast;
 
 /// The type of an S-expression token without the inner data.
 ///

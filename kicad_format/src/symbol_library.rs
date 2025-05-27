@@ -3,7 +3,7 @@
 use kicad_sexpr::Sexpr;
 
 use crate::{
-    common::symbol::{LibSymbol, LibraryId, SymbolProperty},
+    common::symbol::{LibSymbol, LibraryId, SymbolProperty, PinNames, LibSymbolSubUnit},
     convert::{FromSexpr, Parser, SexprListExt, ToSexpr, VecToMaybeSexprVec},
     simple_maybe_from_sexpr, KiCadParseError,
 };
@@ -110,24 +110,64 @@ pub enum SymbolDefinition {
 
 impl FromSexpr for SymbolDefinition {
     fn from_sexpr(mut parser: Parser) -> Result<Self, KiCadParseError> {
-        // We need to look ahead to determine if this is a derived symbol or a
-        // root symbol, so we make a copy of the original parser. That way, we
-        // can do out initial inspection to determine the symbol type (which
-        // consumes tokens), and then send it to the correct FromSexpr
-        // implementation later.
-        let backup = parser.clone();
-
-        // Both types will have a `symbol` token and a string ID.
+        // More efficient: just peek at the third element
         parser.expect_symbol_matching("symbol")?;
-        let _id = parser.expect_string()?.parse::<LibraryId>()?;
-
-        // The derived symbol will have an `extends` token and a string ID.
-        let extends = parser.maybe_string_with_name("extends")?;
-
-        Ok(match extends {
-            Some(_) => Self::DerivedSymbol(DerivedLibSymbol::from_sexpr(backup)?),
-            None => Self::RootSymbol(LibSymbol::from_sexpr(backup)?),
-        })
+        let id = parser.expect_string()?.parse::<LibraryId>()?;
+        
+        // Check if next element exists and is "extends"
+        let is_derived = parser.peek_next()
+            .and_then(|sexpr| sexpr.as_list())
+            .and_then(|list| list.first())
+            .and_then(|s| s.as_symbol())
+            .map(|s| s == "extends")
+            .unwrap_or(false);
+        
+        if is_derived {
+            let extends = parser.expect_string_with_name("extends")?;
+            let properties = parser.expect_many::<SymbolProperty>()?;
+            parser.expect_end()?;
+            
+            Ok(Self::DerivedSymbol(DerivedLibSymbol {
+                id,
+                extends,
+                properties,
+            }))
+        } else {
+            // Parse the rest as a root symbol
+            let power = parser.maybe_empty_list_with_name("power")?;
+            let hide_pin_numbers = parser
+                .maybe_list_with_name("pin_numbers")
+                .map(|mut p| {
+                    p.expect_symbol_matching("hide")?;
+                    p.expect_end()?;
+                    Ok::<_, KiCadParseError>(())
+                })
+                .transpose()?
+                .is_some();
+            let pin_names = parser.maybe::<PinNames>()?;
+            let exclude_from_sim = parser.maybe_bool_with_name("exclude_from_sim")?;
+            let in_bom = parser.expect_bool_with_name("in_bom")?;
+            let on_board = parser.expect_bool_with_name("on_board")?;
+            let properties = parser.expect_many::<SymbolProperty>()?;
+            let units = parser.expect_many::<LibSymbolSubUnit>()?;
+            let embedded_fonts = parser.maybe_bool_with_name("embedded_fonts")?;
+            parser.expect_end()?;
+            
+            Ok(Self::RootSymbol(LibSymbol {
+                id,
+                power,
+                hide_pin_numbers,
+                pin_names,
+                exclude_from_sim,
+                in_bom,
+                on_board,
+                properties,
+                graphic_items: Vec::new(),
+                pins: Vec::new(),
+                units,
+                embedded_fonts,
+            }))
+        }
     }
 }
 

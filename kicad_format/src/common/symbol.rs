@@ -5,6 +5,7 @@ use std::{fmt::Display, str::FromStr};
 
 use kicad_sexpr::{Sexpr, SexprList};
 use regex::Regex;
+use std::sync::OnceLock;
 
 use crate::{
     convert::{
@@ -198,11 +199,15 @@ impl LibraryId {
     }
 }
 
+static LIBRARY_ID_REGEX: OnceLock<Regex> = OnceLock::new();
+
 impl FromStr for LibraryId {
     type Err = KiCadParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = Regex::new(r"^(?:([^:]+):)?([^:]+)$").unwrap();
+        let re = LIBRARY_ID_REGEX.get_or_init(|| {
+            Regex::new(r"^(?:([^:]+):)?([^:]+)$").unwrap()
+        });
 
         let Some(captures) = re.captures(s) else {
             return Err(KiCadParseError::InvalidLibraryIdentifier(s.to_string()));
