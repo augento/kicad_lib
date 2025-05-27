@@ -21,7 +21,7 @@ pub mod zone;
 /// Generic position type used in many parts of the format.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct Position {
     /// The `X` attribute defines the horizontal position of the object.
     pub x: f32,
